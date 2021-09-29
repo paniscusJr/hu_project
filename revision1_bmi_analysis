@@ -1,0 +1,68 @@
+# Created by Matt Oetjens
+# Date 09-29-2021
+# Tested on darwin
+
+
+library(tidyverse)
+
+################################################################################
+# LOAD DATA AND CONVERT TO TIBBLE
+################################################################################
+# Set working directory
+setwd("/home/mtoetjens/nas/Oetjens_Group_t1/mtoetjens/hu_resubmit/")
+
+# Load samples included in study, 145K CNVs
+hu_samples.dat <- read_csv("01_Data/HU_Passing_CNVs_928.csv")
+cnvs.dat <-  read_delim("01_Data/m145K_RecurrentCNV_Filtered_for_RGD.txt","\t", escape_double = FALSE, trim_ws = TRUE)
+
+# Load Demographic data
+demo.dat <- read_delim("/nas/Oetjens_Group_t1/data/PIDB/DEMO_PLUS.csv", 
+                        "|", escape_double = FALSE, col_types = cols(PT_BIRTH_DT = col_character(), 
+                                                                     PT_DEATH_DT = col_character(), CONSENT_DT = col_character(), 
+                                                                     FIRST_ENCOUNTER_DT = col_character(), 
+                                                                     LAST_ENCOUNTER_DT = col_character(), 
+                                                                     MIN_LLM_DT = col_character(), MIN_STATIN_DT = col_character(), 
+                                                                     T2DM_PHENO_INDEX_DT = col_character(), 
+                                                                     HTN_PHENO_INDEX_DT = col_character()), trim_ws = TRUE)
+#Uppercase all colnames
+colnames(demo.dat) <- toupper(colnames(demo.dat))
+colnames(cnvs.dat) <- toupper(colnames(cnvs.dat))
+colnames(hu_samples.dat) <- toupper(colnames(hu_samples.dat))
+
+# Convert to tibble
+hu_samples.dat <- as_tibble(hu_samples.dat)
+cnvs.dat <- as_tibble(cnvs.dat)
+demo.dat <- as_tibble(demo.dat)
+
+################################################################################
+# CLEAN CNV NAMES
+################################################################################
+
+cnvs.dat$CNV_CONCAT<- cnvs.dat$CNV
+# Merge 22q11.2 A-B and A-D
+cnvs.dat$CNV_CONCAT <- str_replace(cnvs.dat$CNV_CONCAT, "^22q*.*proximal.*", "22q11.2 recurrent (DGS/VCFS) region (proximal) (includes TBX1)")
+# Merge 1q21.1 (GJA5)+(TAR) Crawford&DosageMap and 1q21.1 recurrent region (BP3-BP4, distal) (includes GJA5)
+cnvs.dat$CNV_CONCAT <- str_replace(cnvs.dat$CNV_CONCAT, "^1q21.1.*", "1q21.1 recurrent region (BP3-BP4, distal) (includes GJA5)")
+
+################################################################################
+# MERGE DATA AND KEEP ONLY SAMPLES IN HU ANALYSIS
+################################################################################
+bmi.dat <- cnvs.dat %>%
+  left_join(
+    select(demo.dat, SEQN_ID,  MEAN_BMI),
+    by= c("GHS" = "SEQN_ID")) %>% 
+  select(GHS, PT_ID,  MEAN_BMI, CNV_CONCAT, DOSAGE, PT_SEX) %>%
+  filter(PT_ID %in% hu_samples.dat$PT_ID)
+
+# number of cnv observations
+length(bmi.dat$PT_ID)
+
+# 2 samples w two cnvs
+bmi.dat %>% count(PT_ID) %>% filter(n > 1)
+
+################################################################################
+# CALCULATE MEAN BMI BY CNV
+################################################################################
+mean_bmi_by_cnv.dat <- bmi.dat %>% 
+  group_by(CNV_CONCAT, DOSAGE, PT_SEX) %>%
+  summarize(mean_bmi = mean(MEAN_BMI, na.rm=TRUE), n = n())
