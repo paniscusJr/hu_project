@@ -34,10 +34,13 @@ hu_samples.dat <- as_tibble(hu_samples.dat)
 cnvs.dat <- as_tibble(cnvs.dat)
 demo.dat <- as_tibble(demo.dat)
 
+system("mkdir -p 02_Results")
+
 ################################################################################
 # CLEAN CNV NAMES
 ################################################################################
 
+# create new CNV column for concat CNV names
 cnvs.dat$CNV_CONCAT<- cnvs.dat$CNV
 # Merge 22q11.2 A-B and A-D
 cnvs.dat$CNV_CONCAT <- str_replace(cnvs.dat$CNV_CONCAT, "^22q*.*proximal.*", "22q11.2 recurrent (DGS/VCFS) region (proximal) (includes TBX1)")
@@ -60,9 +63,25 @@ length(bmi.dat$PT_ID)
 # 2 samples w two cnvs
 bmi.dat %>% count(PT_ID) %>% filter(n > 1)
 
+write.table(bmi.dat, file="02_Results/BMI_DATA_FOR_CNV_BY_SAMPLE.txt",
+            sep="\t",
+            quote=FALSE, 
+            row.names=FALSE)
+
 ################################################################################
 # CALCULATE MEAN BMI BY CNV
 ################################################################################
-mean_bmi_by_cnv.dat <- bmi.dat %>% 
-  group_by(CNV_CONCAT, DOSAGE, PT_SEX) %>%
-  summarize(mean_bmi = mean(MEAN_BMI, na.rm=TRUE), n = n())
+(mean_bmi_by_cnv.dat <-bmi.dat %>% 
+    group_by(CNV_CONCAT, DOSAGE, PT_SEX) %>%
+    summarize(MEAN_BMI = mean(MEAN_BMI, na.rm=TRUE), N = n()) %>%
+    mutate(MEAN_BMI  = round(MEAN_BMI, 2)) %>%
+    pivot_wider(id_cols = c(CNV_CONCAT, DOSAGE), 
+                names_from = PT_SEX, 
+                values_from = c("MEAN_BMI", "N")))
+
+
+  
+  
+write_excel_csv(mean_bmi_by_cnv.dat, "./02_Results/MEAN_BMI_BY_CNV_AND_SEX.09302021.csv")
+
+
